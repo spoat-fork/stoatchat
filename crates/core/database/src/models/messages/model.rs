@@ -731,7 +731,7 @@ impl Message {
                                     },
                                     member.map(Into::into),
                                 ),
-                                Some(author),
+                                Some(author.clone()),
                                 channel.to_owned().into(),
                             )
                             .await,
@@ -739,7 +739,11 @@ impl Message {
                         self.clone(),
                         match channel {
                             Channel::DirectMessage { recipients, .. }
-                            | Channel::Group { recipients, .. } => recipients.clone(),
+                            | Channel::Group { recipients, .. } => recipients
+                                .iter()
+                                .filter(|uid| *uid != author.id())
+                                .cloned()
+                                .collect(),
                             Channel::TextChannel { .. } => {
                                 self.mentions.clone().unwrap_or_default()
                             }
