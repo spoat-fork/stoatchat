@@ -266,6 +266,7 @@ impl Request {
         let url_host_str = url.host_str().ok_or(create_error!(ProxyError))?.to_string();
 
         Request::url_is_blacklisted(&url).await?;
+        let mut redirect_count = 0;
 
         loop {
             let response = CLIENT
@@ -284,6 +285,11 @@ impl Request {
             .map_err(|_| create_error!(ProxyError))?;
 
             if response.status().is_redirection() {
+                redirect_count += 1;
+
+                if redirect_count > 5 {
+                    return Err(create_error!(ProxyError));
+                }
                 if let Some(location) = response.headers().get("location") {
                     let location = location.to_str().map_err(|_| create_error!(ProxyError))?;
                     url = Url::from_str(location).to_internal_error()?;
