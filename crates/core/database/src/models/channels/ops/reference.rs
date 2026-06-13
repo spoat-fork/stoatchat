@@ -151,4 +151,10 @@ impl AbstractChannels for ReferenceDb {
             Err(create_error!(NotFound))
         }
     }
+
+    async fn wipe_channel(&self, channel: &Channel) -> Result<()> {
+        let mut messages = self.messages.lock().await;
+        messages.retain(|_, message| message.channel != channel.id());
+        Ok(())
+    }
 }

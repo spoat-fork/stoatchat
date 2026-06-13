@@ -329,6 +329,7 @@ auto_derived! {
         // Channels
         DeleteChannel,
         EditChannel,
+        WipeChannel
     }
 
     // Joiner payloads
@@ -380,6 +381,7 @@ impl AdminAuditItemActions {
             AdminAuditItemActions::DisableAccount => true,
             AdminAuditItemActions::DeleteChannel => true,
             AdminAuditItemActions::EditChannel => true,
+            AdminAuditItemActions::WipeChannel => true,
         }
     }
 }

@@ -282,6 +282,16 @@ pub enum EventV1 {
         id: String,
     },
 
+    /// Channel wiped
+    ///
+    /// Clients should remove all associated data:
+    /// - Messages
+    /// - Unreads
+    /// - Voice States
+    ChannelWipe {
+        id: String,
+    },
+
     /// User joins a group
     ChannelGroupJoin {
         id: String,

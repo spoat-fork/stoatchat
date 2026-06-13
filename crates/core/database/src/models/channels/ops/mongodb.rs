@@ -261,6 +261,23 @@ impl AbstractChannels for MongoDb {
         // Delete the channel itself
         query!(self, delete_one_by_id, COL, channel.id()).map(|_| ())
     }
+
+    // Wipe a channel's messages
+    async fn wipe_channel(&self, channel: &Channel) -> Result<()> {
+        let id = channel.id().to_string();
+
+        // Delete invites and unreads.
+        self.delete_associated_channel_objects(Bson::String(id.to_string()))
+            .await?;
+
+        // Delete messages.
+        self.delete_bulk_messages(doc! {
+            "channel": &id
+        })
+        .await?;
+
+        Ok(())
+    }
 }
 
 impl MongoDb {

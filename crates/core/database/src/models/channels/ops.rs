@@ -1,3 +1,4 @@
+use bson::{doc, Bson};
 use crate::{revolt_result::Result, Channel, FieldsChannel, PartialChannel};
 use revolt_permissions::OverrideField;
 
@@ -48,5 +49,6 @@ pub trait AbstractChannels: Sync + Send {
     async fn remove_user_from_group(&self, channel_id: &str, user_id: &str) -> Result<()>;
 
     // Delete a channel
-    async fn delete_channel(&self, channel_id: &Channel) -> Result<()>;
+    async fn delete_channel(&self, channel_id: &Channel) -> Result<()>; // Wipe a channel's messages
+    async fn wipe_channel(&self, channel: &Channel) -> Result<()>;
 }

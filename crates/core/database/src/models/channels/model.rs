@@ -762,6 +762,13 @@ impl Channel {
         // - channels list / categories list on server
         db.delete_channel(self).await
     }
+    
+    /// Wipe a channel's messages
+    pub async fn wipe(&self, db: &Database) -> Result<()> {
+        let id = self.id().to_string();
+        EventV1::ChannelWipe { id: id.clone() }.p(id).await;
+        db.wipe_channel(self).await
+    }
 }
 
 #[cfg(feature = "mongodb")]
