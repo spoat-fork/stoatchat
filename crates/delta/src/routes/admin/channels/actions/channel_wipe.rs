@@ -22,8 +22,8 @@ pub async fn admin_channel_wipe(
         }));
     }
 
-    let mut channel = channel_id.as_channel(db).await?;
-    
+    let channel = channel_id.as_channel(db).await?;
+
     channel.wipe(db).await?;
 
     create_audit_action(
@@ -35,6 +35,6 @@ pub async fn admin_channel_wipe(
         None,
     )
         .await?;
-    
+
     Ok(EmptyResponse)
 }
