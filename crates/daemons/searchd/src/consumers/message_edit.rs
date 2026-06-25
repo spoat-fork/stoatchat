@@ -1,33 +1,38 @@
-use amqprs::{
-    BasicProperties, Deliver,
-    channel::{BasicAckArguments, BasicRejectArguments, Channel},
-    consumer::AsyncConsumer,
-};
-use async_trait::async_trait;
-use revolt_database::{Database, events::rabbit::MessageEditPayload};
-use revolt_search::ElasticsearchClient;
+use std::sync::Arc;
 
+
+use lapin::{Channel, Connection, message::Delivery, options::{BasicAckOptions, BasicRejectOptions}};
+
+use async_trait::async_trait;
+use revolt_database::{Database, events::rabbit::MessageEditPayload, amqp::consumer::Consumer};
+use revolt_search::ElasticsearchClient;
+use anyhow::Result;
+
+#[derive(Clone)]
 pub struct MessageEditConsumer {
     client: ElasticsearchClient,
     database: Database,
-}
-
-impl MessageEditConsumer {
-    pub fn new(client: ElasticsearchClient, database: Database) -> Self {
-        Self { client, database }
-    }
+    connection: Arc<Connection>,
+    channel: Arc<Channel>,
 }
 
 #[async_trait]
-impl AsyncConsumer for MessageEditConsumer {
-    async fn consume(
-        &mut self,
-        channel: &Channel,
-        deliver: Deliver,
-        _basic_properties: BasicProperties,
-        content: Vec<u8>,
-    ) {
-        let payload = serde_json::from_slice::<MessageEditPayload>(&content)
+impl Consumer<ElasticsearchClient> for MessageEditConsumer {
+    async fn create(database: Database, connection: Arc<Connection>, channel: Arc<Channel>, client: ElasticsearchClient) -> Self {
+        Self {
+            client,
+            database,
+            connection,
+            channel,
+        }
+    }
+
+    fn channel(&self) -> &Arc<Channel> {
+        &self.channel
+    }
+
+    async fn consume(&self, delivery: Delivery) -> Result<()> {
+        let payload = serde_json::from_slice::<MessageEditPayload>(&delivery.data)
             .expect("Failed to decode message");
         log::debug!("Received edit message {payload:?}");
 
@@ -37,15 +42,19 @@ impl AsyncConsumer for MessageEditConsumer {
             .await
             .is_ok()
         {
-            channel
-                .basic_ack(BasicAckArguments::new(deliver.delivery_tag(), false))
+            self.channel
+                .basic_ack(delivery.delivery_tag, BasicAckOptions::default())
                 .await
                 .expect("Failed to ack");
         } else {
-            channel
-                .basic_reject(BasicRejectArguments::new(deliver.delivery_tag(), true))
+            self.channel
+                .basic_reject(delivery.delivery_tag, BasicRejectOptions {
+                    requeue: true,
+                })
                 .await
                 .expect("Failed to reject");
-        }
+        };
+
+        Ok(())
     }
 }

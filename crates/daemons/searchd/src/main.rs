@@ -1,16 +1,14 @@
-use amqprs::{
-    FieldTable,
-    channel::{
-        BasicConsumeArguments, Channel, ExchangeDeclareArguments, QueueBindArguments,
-        QueueDeclareArguments,
-    },
-    connection::{Connection, OpenConnectionArguments},
-    consumer::AsyncConsumer,
+use lapin::{
+    options::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
+    types::{AMQPValue, FieldTable},
+    Channel, Connection, ConnectionProperties,
 };
+use log::info;
 use revolt_config::{Settings, config, configure};
-use revolt_database::DatabaseInfo;
+use revolt_database::{Database, DatabaseInfo, amqp::consumer::{Consumer, Delegate}};
 use revolt_search::ElasticsearchClient;
 use tokio::{signal::ctrl_c, spawn};
+use std::{marker::PhantomData, sync::Arc};
 
 mod consumers;
 mod index;
@@ -38,53 +36,63 @@ async fn _main() {
         client.setup_indexes().await.unwrap();
     };
 
-    let connection = Connection::open(&OpenConnectionArguments::new(
-        &config.rabbit.host,
-        config.rabbit.port,
-        &config.rabbit.username,
-        &config.rabbit.password,
-    ))
-    .await
-    .expect("Failed to connect to RabbitMQ");
+    let connection = Arc::new(
+        Connection::connect(
+            &format!(
+                "amqp://{}:{}@{}:{}",
+                &config.rabbit.username,
+                &config.rabbit.password,
+                &config.rabbit.host,
+                &config.rabbit.port,
+            ),
+            ConnectionProperties::default(),
+        )
+        .await
+        .expect("Failed to connect to RabbitMQ"),
+    );
 
     let mut channels = Vec::new();
 
     channels.push(
-        make_queue_and_consume(
-            &config,
+        make_queue_and_consume::<consumers::MessageConsumer>(
+            &client,
+            &db,
             &connection,
+            &config,
             &config.elasticsearch.message_queue,
-            consumers::MessageConsumer::new(client.clone(), db.clone()),
         )
         .await,
     );
 
     channels.push(
-        make_queue_and_consume(
-            &config,
+        make_queue_and_consume::<consumers::MessageEditConsumer>(
+            &client,
+            &db,
             &connection,
+            &config,
             &config.elasticsearch.message_edit_queue,
-            consumers::MessageEditConsumer::new(client.clone(), db.clone()),
         )
         .await,
     );
 
     channels.push(
-        make_queue_and_consume(
-            &config,
+        make_queue_and_consume::<consumers::MessageDeleteConsumer>(
+            &client,
+            &db,
             &connection,
+            &config,
             &config.elasticsearch.message_delete_queue,
-            consumers::MessageDeleteConsumer::new(client.clone(), db.clone()),
         )
         .await,
     );
 
     channels.push(
-        make_queue_and_consume(
-            &config,
+        make_queue_and_consume::<consumers::ChannelDeleteConsumer>(
+            &client,
+            &db,
             &connection,
+            &config,
             &config.elasticsearch.channel_delete_queue,
-            consumers::ChannelDeleteConsumer::new(client.clone(), db.clone()),
         )
         .await,
     );
@@ -98,10 +106,10 @@ async fn _main() {
         task = Some(spawn(index::index_existing_messages(db, client.clone())));
     }
 
-    ctrl_c().await.expect("Failed to wait for ctrl-c");
+    ctrl_c().await.unwrap();
 
     for channel in channels {
-        channel.close().await.unwrap();
+        let _ = channel.close(0, "close".into()).await;
     }
 
     if let Some(task) = task {
@@ -109,52 +117,85 @@ async fn _main() {
     }
 }
 
-async fn make_queue_and_consume<F: AsyncConsumer + Send + 'static>(
+async fn make_queue_and_consume<F: Consumer<ElasticsearchClient>>(
+    client: &ElasticsearchClient,
+    db: &Database,
+    connection: &Arc<Connection>,
     config: &Settings,
-    connection: &Connection,
-    queue: &str,
-    consumer: F,
-) -> Channel {
-    let channel = connection.open_channel(None).await.unwrap();
+    queue_name: &str,
+) -> Arc<Channel> {
+    let channel = Arc::new(connection.create_channel().await.unwrap());
 
     channel
         .exchange_declare(
-            ExchangeDeclareArguments::new(&config.elasticsearch.exchange, "direct")
-                .durable(true)
-                .finish(),
+            config.elasticsearch.exchange.clone().into(),
+            lapin::ExchangeKind::Direct,
+            ExchangeDeclareOptions {
+                durable: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
         )
         .await
-        .expect("Failed to declare pushd exchange");
+        .expect("Failed to declare exchange");
 
-    let mut table = FieldTable::new();
-    table.insert("x-queue-type".try_into().unwrap(), "quorum".into());
+    let mut table = FieldTable::default();
+    table.insert("x-queue-type".try_into().unwrap(), AMQPValue::LongString("quorum".into()));
 
-    _ = channel
-        .queue_declare(
-            QueueDeclareArguments::new(queue)
-                .durable(true)
-                .arguments(table)
-                .finish(),
-        )
+    let args = QueueDeclareOptions {
+        durable: true,
+        ..Default::default()
+    };
+
+    channel
+        .queue_declare(queue_name.into(), args, table)
         .await
-        .unwrap()
         .unwrap();
 
     channel
-        .queue_bind(QueueBindArguments::new(
-            queue,
-            &config.elasticsearch.exchange,
-            queue,
-        ))
+        .queue_bind(
+            queue_name.into(),
+            config.elasticsearch.exchange.clone().into(),
+            queue_name.into(),
+            QueueBindOptions::default(),
+            FieldTable::default(),
+        )
         .await
-        .expect("This probably means the revolt.messages exchange does not exist in rabbitmq!");
+        .expect(
+            "This probably means the revolt.messages exchange does not exist in rabbitmq!",
+        );
 
-    let args = BasicConsumeArguments::new(queue, "")
-        .manual_ack(true)
-        .finish();
 
-    let tag = channel.basic_consume(consumer, args).await.unwrap();
-    log::info!("Consuming queue {queue}, tag {tag}");
+    let consumer = channel
+        .basic_consume(
+            queue_name.into(),
+            "".into(),
+            BasicConsumeOptions {
+                no_ack: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+    info!(
+        "Consuming routing key {} as queue {}, tag {}",
+        queue_name,
+        queue_name,
+        consumer.tag()
+    );
+
+    let delegate = Delegate::new(
+        F::create(
+            db.clone(),
+            connection.clone(),
+            channel.clone(),
+            client.clone(),
+        )
+        .await,
+    );
+
+    consumer.set_delegate(delegate);
 
     channel
 }

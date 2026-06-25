@@ -882,13 +882,13 @@ impl User {
     /// - deletes owned bots, servers and messages
     /// - removes user from all groups
     /// - clears relationships
-    pub async fn delete(&mut self, db: &Database) -> Result<()> {
+    pub async fn delete(&mut self, db: &Database, amqp: Option<&AMQP>) -> Result<()> {
         for bot in db.fetch_bots_by_user(&self.id).await? {
             bot.delete(db).await?;
         }
 
         for server in db.fetch_owned_servers(&self.id).await? {
-            server.delete(db).await?;
+            server.delete(db, amqp).await?;
         }
 
         self.remove_from_all_groups(db).await?;
