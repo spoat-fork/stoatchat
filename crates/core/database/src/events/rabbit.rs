@@ -100,3 +100,11 @@ pub struct MessageEditPayload {
     pub message: Message,
     pub user: Option<User>,
 }
+
+/// This is not the same as the AckPayload above, as the state for this event is stored in redis to allow for state updates while the event is queued.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AckEventPayload {
+    pub user_id: String,
+    pub channel_id: Option<String>,
+    pub server_id: Option<String>,
+}

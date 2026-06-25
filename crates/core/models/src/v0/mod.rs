@@ -15,6 +15,9 @@ mod servers;
 mod user_settings;
 mod users;
 mod search;
+mod accounts;
+mod mfa_tickets;
+mod sessions;
 
 pub use bots::*;
 pub use channel_invites::*;
@@ -33,3 +36,6 @@ pub use servers::*;
 pub use user_settings::*;
 pub use users::*;
 pub use search::*;
+pub use accounts::*;
+pub use mfa_tickets::*;
+pub use sessions::*;

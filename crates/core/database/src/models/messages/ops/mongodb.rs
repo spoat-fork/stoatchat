@@ -463,6 +463,12 @@ impl AbstractMessages for MongoDb {
 
         Ok(ChunkedDatabaseGenerator::new_mongo(session, cursor))
     }
+
+    async fn delete_messages_by_user(&self, user_id: &str) -> Result<()> {
+        self.delete_bulk_messages(doc! {
+            "author": user_id,
+        }).await
+    }
 }
 
 impl IntoDocumentPath for FieldsMessage {

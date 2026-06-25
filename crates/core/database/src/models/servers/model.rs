@@ -87,6 +87,9 @@ auto_derived_partial!(
         /// Ranking of this role
         #[serde(default)]
         pub rank: i64,
+        /// Custom icon attachment
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub icon: Option<File>,
     },
     "PartialRole"
 );
@@ -130,6 +133,7 @@ auto_derived!(
     /// Optional fields on server object
     pub enum FieldsRole {
         Colour,
+        Icon,
     }
 );
 
@@ -315,6 +319,7 @@ impl Role {
             colour: self.colour,
             hoist: Some(self.hoist),
             rank: Some(self.rank),
+            icon: self.icon,
         }
     }
 
@@ -328,6 +333,7 @@ impl Role {
             colour: None,
             hoist: false,
             permissions: Default::default(),
+            icon: None,
         };
 
         db.insert_role(&server.id, &role).await?;
@@ -377,6 +383,7 @@ impl Role {
     pub fn remove_field(&mut self, field: &FieldsRole) {
         match field {
             FieldsRole::Colour => self.colour = None,
+            FieldsRole::Icon => self.icon = None,
         }
     }
 
@@ -423,7 +430,7 @@ mod tests {
 
     use crate::{fixture, util::permissions::DatabasePermissionQuery};
 
-    #[async_std::test]
+    #[tokio::test]
     async fn permissions() {
         database_test!(|db| async move {
             fixture!(db, "server_with_roles",

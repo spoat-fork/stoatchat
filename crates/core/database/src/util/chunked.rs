@@ -44,4 +44,20 @@ impl<T: for<'d> Deserialize<'d> + Clone> ChunkedDatabaseGenerator<T> {
             }
         }
     }
+
+    pub async fn next_n(&mut self, n: usize) -> Result<Option<Vec<T>>> {
+        let mut docs = Vec::new();
+
+        while docs.len() < n {
+            if let Some(doc) = self.next().await? {
+                docs.push(doc);
+            } else if docs.is_empty() {
+                return Ok(None);
+            } else {
+                break;
+            }
+        }
+
+        Ok(Some(docs))
+    }
 }

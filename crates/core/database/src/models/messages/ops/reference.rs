@@ -1,14 +1,13 @@
+use crate::{
+    util::ChunkedDatabaseGenerator, AppendMessage, FieldsMessage, Message, MessageQuery,
+    MessageWithUser, PartialMessage, ReferenceDb,
+};
 use futures::future::try_join_all;
 use indexmap::IndexSet;
 use revolt_result::Result;
 use std::collections::HashMap;
 use std::time::SystemTime;
 use ulid::Ulid;
-
-use crate::{
-    util::ChunkedDatabaseGenerator, AppendMessage, FieldsMessage, Message, MessageQuery,
-    MessageWithUser, PartialMessage, ReferenceDb,
-};
 
 use super::AbstractMessages;
 
@@ -260,7 +259,7 @@ impl AbstractMessages for ReferenceDb {
         let mut messages = self.messages.lock().await;
         if let Some(message) = messages.get_mut(id) {
             if let Some(users) = message.reactions.get_mut(emoji) {
-                users.remove(&user.to_string());
+                users.swap_remove(&user.to_string());
             }
 
             Ok(())
@@ -273,7 +272,7 @@ impl AbstractMessages for ReferenceDb {
     async fn clear_reaction(&self, id: &str, emoji: &str) -> Result<()> {
         let mut messages = self.messages.lock().await;
         if let Some(message) = messages.get_mut(id) {
-            message.reactions.remove(emoji);
+            message.reactions.swap_remove(emoji);
             Ok(())
         } else {
             Err(create_error!(NotFound))
@@ -372,5 +371,15 @@ impl AbstractMessages for ReferenceDb {
                 })
                 .collect(),
         ))
+    }
+
+    async fn delete_messages_by_user(&self, user_id: &str) -> Result<()> {
+        let mut messages = self.messages.lock().await;
+
+        messages.retain(|_, message| message.author != user_id);
+
+        // TODO: remove attachments as well
+
+        Ok(())
     }
 }

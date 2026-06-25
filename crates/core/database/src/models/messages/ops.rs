@@ -61,4 +61,6 @@ pub trait AbstractMessages: Sync + Send {
 
     /// Fetches all messages along with their author from every message in decending order
     async fn fetch_all_messages(&self) -> Result<ChunkedDatabaseGenerator<MessageWithUser>>;
+    
+    async fn delete_messages_by_user(&self, user_id: &str) -> Result<()>;
 }
