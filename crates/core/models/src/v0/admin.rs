@@ -325,9 +325,14 @@ auto_derived! {
         // Accounts
         DeleteAccount,
         DisableAccount,
+        EmailChange,
+        EmailVerify,
+        EnableAccount,
 
         // Channels
         DeleteChannel,
+        EditChannel,
+        WipeChannel
     }
 
     // Joiner payloads
@@ -377,7 +382,12 @@ impl AdminAuditItemActions {
             AdminAuditItemActions::ServerFetchMembers => false,
             AdminAuditItemActions::DeleteAccount => true,
             AdminAuditItemActions::DisableAccount => true,
+            AdminAuditItemActions::EmailChange => true,
+            AdminAuditItemActions::EmailVerify => true,
+            AdminAuditItemActions::EnableAccount => true,
             AdminAuditItemActions::DeleteChannel => true,
+            AdminAuditItemActions::EditChannel => true,
+            AdminAuditItemActions::WipeChannel => true,
         }
     }
 }
