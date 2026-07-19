@@ -71,7 +71,7 @@ async fn delete_session_internal(user_id: &str, session_id: u32, skip_region: bo
         }
 
         // Return whether this was the last session
-        let is_empty = __get_set_size(&mut conn, user_id).await == 0;
+        let is_empty = __get_set_size(&mut conn, &format!("sessions:{user_id}")).await == 0;
         if is_empty {
             __remove_from_set_string(&mut conn, ONLINE_SET, user_id).await;
             info!("User ID {} just went offline.", &user_id);
@@ -87,7 +87,9 @@ async fn delete_session_internal(user_id: &str, session_id: u32, skip_region: bo
 /// Check whether a given user ID is online
 pub async fn is_online(user_id: &str) -> bool {
     if let Ok(mut conn) = get_connection().await {
-        conn.exists(user_id).await.unwrap_or(false)
+        conn.exists(format!("sessions:{user_id}"))
+            .await
+            .unwrap_or(false)
     } else {
         false
     }
